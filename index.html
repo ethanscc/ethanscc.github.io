@@ -2,64 +2,58 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Snake Game (Controller + Hard Mode + Leaderboard)</title>
+<title>Snake Game — Modes & Persistent Best</title>
 <style>
   body {
     background: black;
     margin: 0;
+    overflow: hidden;
     color: white;
     font-family: Consolas, monospace;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
   }
   canvas {
     background: black;
     display: block;
-    border: 2px solid white;
     margin-top: 10px;
   }
-  .buttons {
-    margin: 5px;
+  .controls {
+    margin-top: 10px;
   }
   button {
     background: #222;
     color: white;
-    border: 1px solid #555;
+    border: 1px solid white;
     padding: 6px 12px;
-    margin: 4px;
-    font-family: inherit;
+    margin: 0 4px;
     cursor: pointer;
+    font-family: Consolas, monospace;
   }
-  button:hover {
-    background: #333;
-  }
-  .leaderboard {
-    margin-top: 10px;
-    text-align: center;
+  button.active {
+    background: white;
+    color: black;
   }
 </style>
 </head>
 <body>
 
-<div class="buttons">
-  <button id="toggleMode">Mode: Wrap Around</button>
-  <button id="toggleHard">Difficulty: Normal</button>
+<h1>Snake Game</h1>
+<div class="controls">
+  <span>Mode:</span>
+  <button id="wrapBtn" class="active">Wrap</button>
+  <button id="wallsBtn">Walls</button>
+  <span>Difficulty:</span>
+  <button id="normalBtn" class="active">Normal</button>
+  <button id="hardBtn">Hard</button>
 </div>
 <canvas id="game"></canvas>
-
-<div class="leaderboard">
-  <h3>Leaderboard</h3>
-  <div id="scores"></div>
-</div>
 
 <script>
 const CELL_SIZE = 20;
 const GRID_WIDTH = 32;
 const GRID_HEIGHT = 24;
-let FPS = 12; // normal
-const FPS_HARD = 18; // hard mode speed
 
 const canvas = document.getElementById("game");
 canvas.width = CELL_SIZE * GRID_WIDTH;
@@ -67,24 +61,21 @@ canvas.height = CELL_SIZE * GRID_HEIGHT;
 const ctx = canvas.getContext("2d");
 
 let snake, direction, nextDirection, food, score, gameOver, paused;
-let wrapMode = true;
+let wrapMode = true; // true = wrap, false = walls
 let hardMode = false;
-let appleDelayCounter = 0;
+let bestScores = JSON.parse(localStorage.getItem("snakeBestScores") || "{}");
+let appleDelay = 0;
 
-document.getElementById("toggleMode").addEventListener("click", () => {
-  wrapMode = !wrapMode;
-  document.getElementById("toggleMode").textContent =
-    `Mode: ${wrapMode ? "Wrap Around" : "Walls Kill"}`;
-  resetGame();
-});
+function getModeKey() {
+  return `${wrapMode ? "wrap" : "walls"}_${hardMode ? "hard" : "normal"}`;
+}
 
-document.getElementById("toggleHard").addEventListener("click", () => {
-  hardMode = !hardMode;
-  document.getElementById("toggleHard").textContent =
-    `Difficulty: ${hardMode ? "Hard" : "Normal"}`;
-  FPS = hardMode ? FPS_HARD : 12;
-  resetGame();
-});
+function getFPS() {
+  if (wrapMode && !hardMode) return 12;
+  if (wrapMode && hardMode) return 25;
+  if (!wrapMode && !hardMode) return 12;
+  if (!wrapMode && hardMode) return 20;
+}
 
 function resetGame() {
   const startX = Math.floor(GRID_WIDTH / 2);
@@ -100,7 +91,7 @@ function resetGame() {
   score = 0;
   gameOver = false;
   paused = false;
-  appleDelayCounter = 0;
+  appleDelay = 0;
 }
 
 function randomFood() {
@@ -130,24 +121,23 @@ function update() {
   if (gameOver || paused) return;
 
   direction = nextDirection;
-  let newHead = {
-    x: snake[0].x + direction.x,
-    y: snake[0].y + direction.y
-  };
+  let newHead = {x: snake[0].x + direction.x, y: snake[0].y + direction.y};
 
   if (wrapMode) {
     newHead.x = (newHead.x + GRID_WIDTH) % GRID_WIDTH;
     newHead.y = (newHead.y + GRID_HEIGHT) % GRID_HEIGHT;
   } else {
-    if (newHead.x < 0 || newHead.x >= GRID_WIDTH ||
-        newHead.y < 0 || newHead.y >= GRID_HEIGHT) {
-      endGame();
+    if (newHead.x < 0 || newHead.x >= GRID_WIDTH || newHead.y < 0 || newHead.y >= GRID_HEIGHT) {
+      gameOver = true;
+      saveBestScore();
       return;
     }
   }
 
+  // Self-collision
   if (snake.some(seg => seg.x === newHead.x && seg.y === newHead.y)) {
-    endGame();
+    gameOver = true;
+    saveBestScore();
     return;
   }
 
@@ -155,31 +145,41 @@ function update() {
 
   if (food && newHead.x === food.x && newHead.y === food.y) {
     score++;
-    food = null; // remove apple
-    appleDelayCounter = hardMode ? 5 : 0; // delay before new apple in hard mode
+    food = null;
+    if (hardMode) {
+      appleDelay = 12; // 1 second delay (FPS=12 normal), will still feel delayed in fast mode
+    } else {
+      food = randomFood();
+    }
   } else {
     snake.pop();
   }
 
-  if (!food && appleDelayCounter > 0) {
-    appleDelayCounter--;
-    if (appleDelayCounter === 0) {
+  if (!food && appleDelay > 0) {
+    appleDelay--;
+    if (appleDelay === 0) {
       food = randomFood();
     }
-  } else if (!food && appleDelayCounter === 0) {
-    food = randomFood();
   }
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // Draw food
   if (food) drawRect(food.x, food.y, "red");
+
+  // Draw snake
   snake.forEach((seg, i) => {
     drawRect(seg.x, seg.y, i === 0 ? "yellow" : "green");
   });
 
-  drawText(`Score: ${score}`, 20, 8, 20, "white");
+  // Best score for current mode/difficulty
+  const modeKey = getModeKey();
+  const best = bestScores[modeKey] || 0;
+
+  // Draw scores
+  drawText(`Score: ${score} | Best: ${best}`, 20, 8, 20, "white");
 
   if (paused) {
     drawText("PAUSED", 36, canvas.width / 2, canvas.height / 2, "white", true);
@@ -188,111 +188,10 @@ function draw() {
   if (gameOver) {
     drawText("GAME OVER", 40, canvas.width / 2, canvas.height / 2 - 20, "red", true);
     drawText(`Final Score: ${score}`, 28, canvas.width / 2, canvas.height / 2 + 20, "white", true);
-    drawText("Press R or A to restart", 22, canvas.width / 2, canvas.height / 2 + 60, "white", true);
+    drawText("Press R to restart", 22, canvas.width / 2, canvas.height / 2 + 60, "white", true);
   }
 }
 
-function endGame() {
-  gameOver = true;
-  saveScore();
-  renderLeaderboard();
-}
-
-// === Leaderboard ===
-function saveScore() {
-  let modeKey = hardMode ? "hard" : "normal";
-  let scores = JSON.parse(localStorage.getItem(`snake_scores_${modeKey}`) || "[]");
-  scores.push(score);
-  scores.sort((a, b) => b - a);
-  scores = scores.slice(0, 5); // keep top 5
-  localStorage.setItem(`snake_scores_${modeKey}`, JSON.stringify(scores));
-}
-
-function renderLeaderboard() {
-  let html = "";
-  ["normal", "hard"].forEach(mode => {
-    let scores = JSON.parse(localStorage.getItem(`snake_scores_${mode}`) || "[]");
-    html += `<strong>${mode.toUpperCase()} MODE</strong><br>`;
-    if (scores.length === 0) {
-      html += "(no scores yet)<br>";
-    } else {
-      scores.forEach((s, i) => {
-        html += `${i + 1}. ${s}<br>`;
-      });
-    }
-    html += "<br>";
-  });
-  document.getElementById("scores").innerHTML = html;
-}
-
-// === Keyboard Controls ===
-document.addEventListener("keydown", e => {
-  if (e.key === "ArrowLeft" || e.key === "a") {
-    if (direction.x !== 1) nextDirection = {x: -1, y: 0};
-  } else if (e.key === "ArrowRight" || e.key === "d") {
-    if (direction.x !== -1) nextDirection = {x: 1, y: 0};
-  } else if (e.key === "ArrowUp" || e.key === "w") {
-    if (direction.y !== 1) nextDirection = {x: 0, y: -1};
-  } else if (e.key === "ArrowDown" || e.key === "s") {
-    if (direction.y !== -1) nextDirection = {x: 0, y: 1};
-  } else if (e.key === "p") {
-    paused = !paused;
-  } else if (e.key === "r") {
-    if (gameOver) resetGame();
-  }
-});
-
-// === Gamepad Controls ===
-let lastGamepadInputTime = 0;
-function handleGamepad() {
-  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-  const gp = gamepads[0];
-  if (!gp) return;
-
-  const now = performance.now();
-  if (now - lastGamepadInputTime < 120) return;
-
-  let horizontal = gp.axes[0];
-  let vertical = gp.axes[1];
-  let dpadUp = gp.buttons[12]?.pressed;
-  let dpadDown = gp.buttons[13]?.pressed;
-  let dpadLeft = gp.buttons[14]?.pressed;
-  let dpadRight = gp.buttons[15]?.pressed;
-
-  if (dpadLeft || horizontal < -0.5) {
-    if (direction.x !== 1) nextDirection = {x: -1, y: 0};
-    lastGamepadInputTime = now;
-  } else if (dpadRight || horizontal > 0.5) {
-    if (direction.x !== -1) nextDirection = {x: 1, y: 0};
-    lastGamepadInputTime = now;
-  } else if (dpadUp || vertical < -0.5) {
-    if (direction.y !== 1) nextDirection = {x: 0, y: -1};
-    lastGamepadInputTime = now;
-  } else if (dpadDown || vertical > 0.5) {
-    if (direction.y !== -1) nextDirection = {x: 0, y: 1};
-    lastGamepadInputTime = now;
-  }
-
-  if (gp.buttons[9]?.pressed) { // Start button
-    paused = !paused;
-    lastGamepadInputTime = now;
-  }
-  if (gp.buttons[0]?.pressed && gameOver) { // A button
-    resetGame();
-    lastGamepadInputTime = now;
-  }
-}
-
-function gameLoop() {
-  handleGamepad();
-  update();
-  draw();
-}
-
-resetGame();
-renderLeaderboard();
-setInterval(gameLoop, 1000 / FPS);
-</script>
-
-</body>
-</html>
+function saveBestScore() {
+  const key = getModeKey();
+  if (!bestScores[key] || score > bestScores[ke]()
