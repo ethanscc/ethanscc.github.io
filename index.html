@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Snake Game (Wrap or Walls)</title>
+<title>Snake Game (Controller Support)</title>
 <style>
   body {
     background: black;
@@ -119,7 +119,6 @@ function update() {
     }
   }
 
-  // Self-collision
   if (snake.some(seg => seg.x === newHead.x && seg.y === newHead.y)) {
     gameOver = true;
     return;
@@ -138,15 +137,12 @@ function update() {
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw food
   drawRect(food.x, food.y, "red");
 
-  // Draw snake
   snake.forEach((seg, i) => {
     drawRect(seg.x, seg.y, i === 0 ? "yellow" : "green");
   });
 
-  // Draw score
   drawText(`Score: ${score}`, 20, 8, 20, "white");
 
   if (paused) {
@@ -156,15 +152,17 @@ function draw() {
   if (gameOver) {
     drawText("GAME OVER", 40, canvas.width / 2, canvas.height / 2 - 20, "red", true);
     drawText(`Final Score: ${score}`, 28, canvas.width / 2, canvas.height / 2 + 20, "white", true);
-    drawText("Press R to restart", 22, canvas.width / 2, canvas.height / 2 + 60, "white", true);
+    drawText("Press R or A to restart", 22, canvas.width / 2, canvas.height / 2 + 60, "white", true);
   }
 }
 
 function gameLoop() {
+  handleGamepad();
   update();
   draw();
 }
 
+// === Keyboard Controls ===
 document.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft" || e.key === "a") {
     if (direction.x !== 1) nextDirection = {x: -1, y: 0};
@@ -180,6 +178,47 @@ document.addEventListener("keydown", e => {
     if (gameOver) resetGame();
   }
 });
+
+// === Gamepad Controls ===
+let lastGamepadInputTime = 0;
+function handleGamepad() {
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = gamepads[0];
+  if (!gp) return;
+
+  const now = performance.now();
+  if (now - lastGamepadInputTime < 120) return; // limit input speed
+
+  let horizontal = gp.axes[0]; // Left stick X
+  let vertical = gp.axes[1];   // Left stick Y
+  let dpadUp = gp.buttons[12]?.pressed;
+  let dpadDown = gp.buttons[13]?.pressed;
+  let dpadLeft = gp.buttons[14]?.pressed;
+  let dpadRight = gp.buttons[15]?.pressed;
+
+  if (dpadLeft || horizontal < -0.5) {
+    if (direction.x !== 1) nextDirection = {x: -1, y: 0};
+    lastGamepadInputTime = now;
+  } else if (dpadRight || horizontal > 0.5) {
+    if (direction.x !== -1) nextDirection = {x: 1, y: 0};
+    lastGamepadInputTime = now;
+  } else if (dpadUp || vertical < -0.5) {
+    if (direction.y !== 1) nextDirection = {x: 0, y: -1};
+    lastGamepadInputTime = now;
+  } else if (dpadDown || vertical > 0.5) {
+    if (direction.y !== -1) nextDirection = {x: 0, y: 1};
+    lastGamepadInputTime = now;
+  }
+
+  if (gp.buttons[9]?.pressed) { // Start / Options button
+    paused = !paused;
+    lastGamepadInputTime = now;
+  }
+  if (gp.buttons[0]?.pressed && gameOver) { // A / Cross button
+    resetGame();
+    lastGamepadInputTime = now;
+  }
+}
 
 resetGame();
 setInterval(gameLoop, 1000 / FPS);
