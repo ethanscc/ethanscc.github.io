@@ -194,4 +194,74 @@ function draw() {
 
 function saveBestScore() {
   const key = getModeKey();
-  if (!bestScores[key] || score > bestScores[ke]()
+  if (!bestScores[key] || score > bestScores[key]) {
+    bestScores[key] = score;
+    localStorage.setItem("snakeBestScores", JSON.stringify(bestScores));
+  }
+}
+
+let gameInterval;
+function startLoop() {
+  if (gameInterval) clearInterval(gameInterval);
+  gameInterval = setInterval(() => {
+    update();
+    draw();
+  }, 1000 / getFPS());
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft" || e.key === "a") {
+    if (direction.x !== 1) nextDirection = {x: -1, y: 0};
+  } else if (e.key === "ArrowRight" || e.key === "d") {
+    if (direction.x !== -1) nextDirection = {x: 1, y: 0};
+  } else if (e.key === "ArrowUp" || e.key === "w") {
+    if (direction.y !== 1) nextDirection = {x: 0, y: -1};
+  } else if (e.key === "ArrowDown" || e.key === "s") {
+    if (direction.y !== -1) nextDirection = {x: 0, y: 1};
+  } else if (e.key === "p") {
+    paused = !paused;
+  } else if (e.key === "r") {
+    if (gameOver) {
+      resetGame();
+    }
+  }
+});
+
+// Mode toggle
+document.getElementById("wrapBtn").addEventListener("click", () => {
+  wrapMode = true;
+  document.getElementById("wrapBtn").classList.add("active");
+  document.getElementById("wallsBtn").classList.remove("active");
+  resetGame();
+  startLoop();
+});
+document.getElementById("wallsBtn").addEventListener("click", () => {
+  wrapMode = false;
+  document.getElementById("wallsBtn").classList.add("active");
+  document.getElementById("wrapBtn").classList.remove("active");
+  resetGame();
+  startLoop();
+});
+
+// Difficulty toggle
+document.getElementById("normalBtn").addEventListener("click", () => {
+  hardMode = false;
+  document.getElementById("normalBtn").classList.add("active");
+  document.getElementById("hardBtn").classList.remove("active");
+  resetGame();
+  startLoop();
+});
+document.getElementById("hardBtn").addEventListener("click", () => {
+  hardMode = true;
+  document.getElementById("hardBtn").classList.add("active");
+  document.getElementById("normalBtn").classList.remove("active");
+  resetGame();
+  startLoop();
+});
+
+resetGame();
+startLoop();
+</script>
+
+</body>
+</html>
